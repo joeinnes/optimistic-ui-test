@@ -1,0 +1,23 @@
+{
+  "name": "optimistic-ui-test",
+  "private": true,
+  "packageManager": "pnpm@10.16.1",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "jazz-tools": "^0.19.12",
+    "next": "15.5.8",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

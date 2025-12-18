@@ -4,7 +4,7 @@ import { Count, JazzAccount } from "@/schema";
 import { slowReq } from "@/serverApi";
 import { co } from "jazz-tools";
 import { useSuspenseAccount, useSuspenseCoState } from "jazz-tools/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 export default function Home() {
   const group = useMemo(() => co.group().create(), []);
@@ -27,13 +27,15 @@ export default function Home() {
   const [clickCount, setClickCount] = useState<number>(0);
   const [failCount, setFailCount] = useState<number>(0);
   const [inFlightCount, setInFlightCount] = useState<number>(0);
+  const inFlightRef = useRef(0);
 
   const handleCountIncrease = async () => {
     setClickCount((prev) => prev + 1);
     if (optimisticBranch.$isLoaded && mainBranch.$isLoaded) {
       try {
         optimisticBranch.$jazz.set("count", optimisticBranch.count + 1);
-        setInFlightCount((prev) => prev + 1);
+        inFlightRef.current += 1;
+        setInFlightCount(inFlightRef.current);
         const { count } = await slowReq.send({
           updateCountMessage: {
             type: "updateCount",
@@ -45,25 +47,20 @@ export default function Home() {
           console.log("received response");
         } else {
           // API call succeeded, but returned authoritative state did not match our optimistic state (maybe someone else updated in the meantime?). Instead of 'correcting' this branch, I'd *like* to discard and recreate, but not sure how to do that without reloading the component.
-          if (inFlightCount === 1) {
-            optimisticBranch.$jazz.set("count", count.count);
-          }
           console.log("mismatch");
         }
       } catch (err) {
         setFailCount((prev) => prev + 1);
         // Slightly different error mode here: the API call itself failed, so we'll get a LKG count from mainBranch
-        if (inFlightCount === 1) {
+      } finally {
+        inFlightRef.current -= 1;
+        setInFlightCount(inFlightRef.current);
+        if (inFlightRef.current === 0) {
+          console.log(
+            "All requests finished, syncing optimistic branch to main",
+          );
           optimisticBranch.$jazz.set("count", mainBranch.count);
         }
-      } finally {
-        setInFlightCount((prev) => {
-          if (prev === 1) {
-            optimisticBranch.$jazz.set("count", mainBranch.count);
-            return 0;
-          }
-          return prev - 1;
-        });
       }
     }
   };

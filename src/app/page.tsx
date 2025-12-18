@@ -2,7 +2,7 @@
 
 import { Count, JazzAccount } from "@/schema";
 import { slowReq } from "@/serverApi";
-import { co } from "jazz-tools";
+import { co, Group, ID } from "jazz-tools";
 import { useSuspenseAccount, useSuspenseCoState } from "jazz-tools/react";
 import { useMemo, useRef, useState } from "react";
 
@@ -28,6 +28,7 @@ export default function Home() {
   const [failCount, setFailCount] = useState<number>(0);
   const [inFlightCount, setInFlightCount] = useState<number>(0);
   const inFlightRef = useRef(0);
+  const latestAuthoritativeState = useRef(mainBranch);
 
   const handleCountIncrease = async () => {
     setClickCount((prev) => prev + 1);
@@ -36,30 +37,27 @@ export default function Home() {
         optimisticBranch.$jazz.set("count", optimisticBranch.count + 1);
         inFlightRef.current += 1;
         setInFlightCount(inFlightRef.current);
+
         const { count } = await slowReq.send({
           updateCountMessage: {
             type: "updateCount",
             id: me.root.count.$jazz.id,
           },
         });
-        if (count.count === optimisticBranch.count) {
-          // Success—ideally at this point, I'd like to discard the optimistic branch and recheck-out the main branch
-          console.log("received response");
-        } else {
-          // API call succeeded, but returned authoritative state did not match our optimistic state (maybe someone else updated in the meantime?). Instead of 'correcting' this branch, I'd *like* to discard and recreate, but not sure how to do that without reloading the component.
-          console.log("mismatch");
-        }
+
+        latestAuthoritativeState.current = count;
       } catch (err) {
         setFailCount((prev) => prev + 1);
-        // Slightly different error mode here: the API call itself failed, so we'll get a LKG count from mainBranch
       } finally {
         inFlightRef.current -= 1;
         setInFlightCount(inFlightRef.current);
+
         if (inFlightRef.current === 0) {
-          console.log(
-            "All requests finished, syncing optimistic branch to main",
-          );
-          optimisticBranch.$jazz.set("count", mainBranch.count);
+          const finalValue =
+            latestAuthoritativeState.current?.count ?? mainBranch.count;
+          optimisticBranch.$jazz.set("count", finalValue);
+
+          latestAuthoritativeState.current = mainBranch;
         }
       }
     }
@@ -134,6 +132,7 @@ export default function Home() {
             with a wrapper component.
           </li>
         </ul>
+        <a href="https://github.com/joeinnes/optimistic-ui-test">Source</a>
       </div>
     </>
   );
